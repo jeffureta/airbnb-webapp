@@ -83,7 +83,7 @@ When architecting agentic web applications (such as single-operator assistants e
 * **Frontend & UI:** Next.js (App Router) + Tailwind CSS + shadcn/ui (reusable components for progress badges, accordion steps, and cards).
 * **Streaming Protocol:** Vercel AI SDK (`ai/react` with `useChat`) for reactive LLM tool-invocation tracking and step-by-step UI updates.
 * **Orchestration & Validation:** Next.js Route Handlers (`app/api/agent/route.ts`) + **Zod** schema enforcement.
-* **Model & Tools:** Gemini 1.5 / 2.0 Flash via `@ai-sdk/google` or `google-genai` (low latency, 1M context, generous free tier up to 15 RPM).
+* **Model & Tools:** Gemini 3.8 Flash / 2.0 Flash via `@ai-sdk/google` or direct Google Generative Language API (low latency, high cost efficiency, and fast streaming).
 * **Hosting & Persistence:** Vercel Hobby Tier ($0/month), state persisted in Supabase Free Tier or browser `localStorage`.
 
 ### 2. Core Implementation Pattern: 3-Step Deterministic Recipe

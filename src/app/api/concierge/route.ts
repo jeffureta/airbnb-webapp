@@ -84,10 +84,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Call Gemini 2.5 Flash endpoint (supported stable version)
+    // Call Gemini 3.8 Flash endpoint (latest supported version)
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -115,6 +115,9 @@ export async function POST(req: NextRequest) {
             content: assistantContent,
           },
         });
+      } else {
+        const errBody = await response.text();
+        console.error(`[GEMINI API ERROR] Status ${response.status}:`, errBody);
       }
     } catch (llmErr) {
       console.error("[GEMINI API FETCH ERROR]", llmErr);
@@ -124,9 +127,19 @@ export async function POST(req: NextRequest) {
     const latestUserMsg = messages[messages.length - 1]?.content?.toLowerCase() || "";
     let fallbackReply = "Mabuhay! I'm Ate Grace, your Tagaytay staycation co-host. How can I help you plan your getaway today?";
 
-    if (latestUserMsg.includes("cook") || latestUserMsg.includes("cooking") || latestUserMsg.includes("fish") || latestUserMsg.includes("smoke")) {
+    if (latestUserMsg.includes("pet") || latestUserMsg.includes("dog") || latestUserMsg.includes("cat") || latestUserMsg.includes("animal")) {
+      fallbackReply = `🐾 **Pet Policy:**\n${TAGAYTAY_UNIT.condoRules.petPolicy}. To ensure comfort and building compliance for all guests, pets are strictly not permitted in the tower.`;
+    } else if (latestUserMsg.includes("balcony") || latestUserMsg.includes("breeze") || latestUserMsg.includes("wind")) {
+      fallbackReply = `🌅 **Balcony & Mountain Breeze:**\nEnjoy direct 180° panoramic views of Taal Lake & Volcano! Please note: ${TAGAYTAY_UNIT.condoRules.balconyQuirk}`;
+    } else if (latestUserMsg.includes("quiet") || latestUserMsg.includes("noise") || latestUserMsg.includes("party")) {
+      fallbackReply = `🤫 **Quiet Hours:**\nQuiet hours are observed from **${TAGAYTAY_UNIT.condoRules.quietHours}**. Loud music and parties are not allowed to maintain a peaceful retreat.`;
+    } else if (latestUserMsg.includes("check in") || latestUserMsg.includes("check out") || latestUserMsg.includes("door") || latestUserMsg.includes("pin") || latestUserMsg.includes("lock")) {
+      fallbackReply = `🔑 **Check-In & Access Details:**\n- **Check-in:** ${TAGAYTAY_UNIT.condoRules.checkIn}\n- **Check-out:** ${TAGAYTAY_UNIT.condoRules.checkOut}\n- **Door Lock:** ${TAGAYTAY_UNIT.condoRules.smartDoorLock}`;
+    } else if (latestUserMsg.includes("wifi") || latestUserMsg.includes("internet") || latestUserMsg.includes("work")) {
+      fallbackReply = `📶 **WiFi & Connectivity:**\n- **Details:** ${TAGAYTAY_UNIT.condoRules.wifiDetails}\n- 100 Mbps high-speed fiber internet perfect for streaming and remote work!`;
+    } else if (latestUserMsg.includes("cook") || latestUserMsg.includes("cooking") || latestUserMsg.includes("fish") || latestUserMsg.includes("smoke")) {
       fallbackReply = `🍳 **Cooking & Smoke Policy:**\n- **Cooking:** ${TAGAYTAY_UNIT.condoRules.cookingPolicy}\n- **Smoking:** ${TAGAYTAY_UNIT.condoRules.smokingPolicy}`;
-    } else if (latestUserMsg.includes("tower") || latestUserMsg.includes("floor") || latestUserMsg.includes("unit")) {
+    } else if (latestUserMsg.includes("tower") || latestUserMsg.includes("floor") || latestUserMsg.includes("unit") || latestUserMsg.includes("address") || latestUserMsg.includes("location")) {
       fallbackReply = `🏢 **Unit Location:**\nWe are located at ${TAGAYTAY_UNIT.condoRules.towerAndFloor}. Keyless 4-digit PIN is sent 2 hours before check-in po!`;
     } else if (latestUserMsg.includes("pool") || latestUserMsg.includes("swimming")) {
       fallbackReply = `🏊 **Swimming Pool Details (Wind Residences):**\n- **Regular Days:** ${TAGAYTAY_UNIT.condoRules.poolFeeRegular}\n- **Holidays/Peak:** ${TAGAYTAY_UNIT.condoRules.poolFeeHoliday}\n- **Hours:** ${TAGAYTAY_UNIT.condoRules.poolHours}\n\n*Pool passes are issued at the clubhouse lobby! Proper swimwear is required po.*`;
