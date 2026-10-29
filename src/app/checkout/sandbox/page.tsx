@@ -1,12 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { ShieldCheck, CheckCircle2, AlertCircle, ArrowLeft, Loader2, Sparkles } from "lucide-react";
+import React, { useState, Suspense } from "react";
+import { useSearchParams, useRouter, notFound } from "next/navigation";
+import { ShieldCheck, CheckCircle2, Loader2, Sparkles } from "lucide-react";
 
 function SandboxCheckoutContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  // Route Guard: Return 404 in production environment
+  if (process.env.NODE_ENV === "production") {
+    notFound();
+  }
 
   const id = searchParams.get("id");
   const method = searchParams.get("method") || "gcash";
@@ -45,7 +50,6 @@ function SandboxCheckoutContent() {
     setLoading(true);
 
     try {
-      // Trigger the webhook endpoint directly to simulate PayMongo callback
       const res = await fetch("/api/v1/payments/webhook", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -62,7 +66,7 @@ function SandboxCheckoutContent() {
       setTimeout(() => {
         router.push(`/booking/confirmed?id=${id}`);
       }, 1500);
-    } catch (err) {
+    } catch {
       alert("Error processing payment simulation");
       setLoading(false);
     }

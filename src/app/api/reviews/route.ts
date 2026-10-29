@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     // Verify reservation status if reservationId is provided
     let isVerified = false;
     if (reservationId) {
-      const res = reservationStore.getById(reservationId);
+      const res = await reservationStore.getById(reservationId);
       if (res && res.paymentStatus === "PAID") {
         isVerified = true;
       }

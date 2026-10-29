@@ -76,7 +76,7 @@ When delivering design solutions, adhere strictly to these industry-proven princ
 ## Tool Capabilities & Digital Asset Integration
 
 ### Visual Asset & Dynamic Image Tool: `tools/unsplash_tool.py`
-The Product Designer Agent is equipped with [unsplash_tool.py](file:///Users/jeffureta/repos/airbnb-webapp/tools/unsplash_tool.py) to fetch curated photography, dynamic Imgix responsive transformations, dominant color palettes, and BlurHash placeholder tokens directly from Unsplash:
+The Product Designer Agent is equipped with [unsplash_tool.py](../tools/unsplash_tool.py) to fetch curated photography, dynamic Imgix responsive transformations, dominant color palettes, and BlurHash placeholder tokens directly from Unsplash:
 
 * **UI Mockup Imagery Discovery:** Search high-res, royalty-free photography tailored to Philippine staycation verticals (e.g. `beachfront villa`, `cozy mountain cabin`, `modern studio loft`).
 * **Design System Asset Presets:** Generate dynamically resized URLs via Imgix for avatars (`64x64`, `128x128`), listing cards (`400x300`, `800x600`), and hero banners (`1920x1080`).

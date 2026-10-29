@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TAGAYTAY_UNIT } from "@/data/unit";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -43,48 +44,111 @@ STYLE & TONE GUIDELINES:
 - Concise, clear, helpful answers with bullet points when sharing fees or hours.
 - Never hallucinate condo building rules or promise unapproved discounts. If someone asks for special long-term stay rates or early check-in, explain that standard check-in is 2:00 PM but they can request early check-in subject to room availability on the day.`;
 
+function getDeterministicReply(latestUserMsg: string): string {
+  const query = (latestUserMsg || "").toLowerCase();
+
+  if (query.includes("pool") || query.includes("swimming")) {
+    return `🏊 **Swimming Pool Details (Wind Residences):**\n- **Regular Days:** ${TAGAYTAY_UNIT.condoRules.poolFeeRegular}\n- **Holidays/Peak:** ${TAGAYTAY_UNIT.condoRules.poolFeeHoliday}\n- **Hours:** ${TAGAYTAY_UNIT.condoRules.poolHours}\n\n*Pool passes are issued at the clubhouse lobby! Proper swimwear is required po.*`;
+  }
+  if (query.includes("parking") || query.includes("car")) {
+    return `🚗 **Parking Information:**\n- **Fee:** ${TAGAYTAY_UNIT.condoRules.parkingFee}\n- Paid directly to the building admin cashier at the parking building. Slots are safe and secure with 24/7 roving guards!`;
+  }
+  if (query.includes("check in") || query.includes("check out") || query.includes("door") || query.includes("pin") || query.includes("lock")) {
+    return `🔑 **Check-In & Access Details:**\n- **Check-in:** ${TAGAYTAY_UNIT.condoRules.checkIn}\n- **Check-out:** ${TAGAYTAY_UNIT.condoRules.checkOut}\n- **Door Lock:** Digital keyless keypad! Your personal 4-digit PIN will be sent 2 hours before check-in.`;
+  }
+  if (query.includes("cook") || query.includes("cooking") || query.includes("smoke") || query.includes("smoking")) {
+    return `🍳 **Cooking & Smoking Policies:**\n- **Cooking:** ${TAGAYTAY_UNIT.condoRules.cookingPolicy}\n- **Smoking:** ${TAGAYTAY_UNIT.condoRules.smokingPolicy}`;
+  }
+  if (query.includes("wifi") || query.includes("internet")) {
+    return `📶 **WiFi & Connectivity:**\n- **Speed:** 100 Mbps High-Speed Fiber\n- **Network:** ${TAGAYTAY_UNIT.condoRules.wifiDetails}`;
+  }
+  if (query.includes("weather") || query.includes("climate") || query.includes("pack")) {
+    return `🌬️ **Tagaytay Weather Tip:**\nTagaytay is refreshingly cool (around 21-22°C), especially during evenings and early mornings with the mountain breeze over the Taal ridge! Make sure to bring a light jacket or cozy cardigan po.`;
+  }
+  if (query.includes("bulalo") || query.includes("food") || query.includes("restaurant") || query.includes("attractions")) {
+    return `🍲 **Recommended Spots Nearby:**\n- **Mahogany Market:** Authentic piping-hot bulalo & fresh sweet pineapples (5 mins away)\n- **Bag of Beans Athena:** Rustic cafe & warm pastries (4 mins away)\n- **Sky Ranch:** Ferris wheel & amusement park (3 mins away)\n\nAll are very accessible from our building!`;
+  }
+  if (query.includes("gcash") || query.includes("pay") || query.includes("booking") || query.includes("discount")) {
+    return `💳 **Direct Booking Perks:**\nWhen you book directly on this site, you save ~15% on Airbnb service fees! We support **GCash, Maya, QR Ph, and credit/debit cards** with instant confirmation.`;
+  }
+  if (query.includes("pet") || query.includes("dog") || query.includes("cat")) {
+    return `🐾 **Pet Policy:**\n${TAGAYTAY_UNIT.condoRules.petPolicy}. To ensure comfort and building compliance for all guests, pets are strictly not permitted in the tower.`;
+  }
+  if (query.includes("balcony") || query.includes("view")) {
+    return `🌅 **Balcony & View:**\nEnjoy direct 180° panoramic views of Taal Lake & Volcano! Please note: ${TAGAYTAY_UNIT.condoRules.balconyQuirk}`;
+  }
+  if (query.includes("quiet") || query.includes("noise") || query.includes("party")) {
+    return `🤫 **Quiet Hours:**\nQuiet hours are observed from **${TAGAYTAY_UNIT.condoRules.quietHours}**. Loud music and parties are not allowed to maintain a peaceful retreat.`;
+  }
+
+  return "Mabuhay! I'm Ate Grace, your Tagaytay staycation co-host. How can I help you plan your getaway today?";
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { messages } = await req.json();
+    // 1. IP extraction and Rate Limiting
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded ? forwarded.split(",")[0].trim() : "127.0.0.1";
+    const rateLimit = checkRateLimit(`concierge_${ip}`, 10, 60000); // 10 requests / min per IP
+
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON in request" }, { status: 400 });
+    }
+
+    const { messages } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "Invalid messages array" }, { status: 400 });
     }
 
+    // 2. Payload sanitization and truncation (prevent denial-of-wallet / prompt injection token bloat)
+    const sanitizedMessages: Message[] = messages
+      .slice(-6) // keep only last 6 messages
+      .filter((m) => m && typeof m.content === "string")
+      .map((m) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: String(m.content).slice(0, 500).trim(), // max 500 characters per message
+      }));
+
+    const latestUserMsg = sanitizedMessages[sanitizedMessages.length - 1]?.content || "";
+
+    // If rate limit exceeded, return deterministic rule-based reply with 429 warning header
+    if (!rateLimit.success) {
+      const fallbackReply = getDeterministicReply(latestUserMsg);
+      return NextResponse.json(
+        {
+          message: {
+            role: "assistant",
+            content: `${fallbackReply}\n\n*(Notice: Chat rate limit reached. Serving instant local co-host answers.)*`,
+          },
+          rateLimited: true,
+        },
+        {
+          headers: {
+            "X-RateLimit-Limit": String(rateLimit.limit),
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(rateLimit.reset),
+          },
+        }
+      );
+    }
+
     const apiKey = process.env.GEMINI_API_KEY;
 
+    // Fallback if API key is not configured
     if (!apiKey) {
-      // Fallback deterministic local response engine when API key is not yet set up
-      const latestUserMsg = messages[messages.length - 1]?.content?.toLowerCase() || "";
-      let reply = "Mabuhay! I'm Ate Grace, your Tagaytay staycation co-host. How can I help you plan your getaway today?";
-
-      if (latestUserMsg.includes("pool") || latestUserMsg.includes("swimming")) {
-        reply = `🏊 **Swimming Pool Details (Wind Residences):**\n- **Regular Days:** ${TAGAYTAY_UNIT.condoRules.poolFeeRegular}\n- **Holidays/Peak:** ${TAGAYTAY_UNIT.condoRules.poolFeeHoliday}\n- **Hours:** ${TAGAYTAY_UNIT.condoRules.poolHours}\n\n*Pool passes are issued at the clubhouse lobby! Proper swimwear is required po.*`;
-      } else if (latestUserMsg.includes("parking") || latestUserMsg.includes("car")) {
-        reply = `🚗 **Parking Information:**\n- **Fee:** ${TAGAYTAY_UNIT.condoRules.parkingFee}\n- Paid directly to the building admin cashier at the parking building. Slots are safe and secure with 24/7 roving guards!`;
-      } else if (latestUserMsg.includes("check in") || latestUserMsg.includes("check out") || latestUserMsg.includes("door") || latestUserMsg.includes("pin") || latestUserMsg.includes("lock")) {
-        reply = `🔑 **Check-In & Access Details:**\n- **Check-in:** ${TAGAYTAY_UNIT.condoRules.checkIn}\n- **Check-out:** ${TAGAYTAY_UNIT.condoRules.checkOut}\n- **Door Lock:** Digital keyless keypad! Your personal 4-digit PIN will be sent 2 hours before check-in.`;
-      } else if (latestUserMsg.includes("cook") || latestUserMsg.includes("cooking") || latestUserMsg.includes("smoke") || latestUserMsg.includes("smoking")) {
-        reply = `🍳 **Cooking & Smoking Policies:**\n- **Cooking:** ${TAGAYTAY_UNIT.condoRules.cookingPolicy}\n- **Smoking:** ${TAGAYTAY_UNIT.condoRules.smokingPolicy}`;
-      } else if (latestUserMsg.includes("wifi") || latestUserMsg.includes("internet")) {
-        reply = `📶 **WiFi & Connectivity:**\n- **Speed:** 100 Mbps High-Speed Fiber\n- **Network:** ${TAGAYTAY_UNIT.condoRules.wifiDetails}`;
-      } else if (latestUserMsg.includes("weather") || latestUserMsg.includes("climate") || latestUserMsg.includes("pack")) {
-        reply = `🌬️ **Tagaytay Weather Tip:**\nTagaytay is refreshingly cool (around 21-22°C), especially during evenings and early mornings with the mountain breeze over the Taal ridge! Make sure to bring a light jacket or cozy cardigan po.`;
-      } else if (latestUserMsg.includes("bulalo") || latestUserMsg.includes("food") || latestUserMsg.includes("restaurant") || latestUserMsg.includes("attractions")) {
-        reply = `🍲 **Recommended Spots Nearby:**\n- **Mahogany Market:** Authentic piping-hot bulalo & fresh sweet pineapples (5 mins away)\n- **Bag of Beans Athena:** Rustic cafe & warm pastries (4 mins away)\n- **Sky Ranch:** Ferris wheel & amusement park (3 mins away)\n\nAll are very accessible from our building!`;
-      } else if (latestUserMsg.includes("gcash") || latestUserMsg.includes("pay") || latestUserMsg.includes("booking") || latestUserMsg.includes("discount")) {
-        reply = `💳 **Direct Booking Perks:**\nWhen you book directly on this site, you save ~15% on Airbnb service fees! We support **GCash, Maya, QR Ph, and credit/debit cards** with instant confirmation.`;
-      }
-
       return NextResponse.json({
         message: {
           role: "assistant",
-          content: reply,
+          content: getDeterministicReply(latestUserMsg),
         },
       });
     }
 
-    // Call Gemini 3.8 Flash endpoint (latest supported version)
+    // 3. Call Gemini 3.8 Flash endpoint with fallback
     try {
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`,
@@ -95,7 +159,7 @@ export async function POST(req: NextRequest) {
             system_instruction: {
               parts: [{ text: SYSTEM_PROMPT }],
             },
-            contents: messages.map((m: Message) => ({
+            contents: sanitizedMessages.map((m) => ({
               role: m.role === "assistant" ? "model" : "user",
               parts: [{ text: m.content }],
             })),
@@ -123,34 +187,11 @@ export async function POST(req: NextRequest) {
       console.error("[GEMINI API FETCH ERROR]", llmErr);
     }
 
-    // Graceful fallback to deterministic local response if LLM API call encounters an issue
-    const latestUserMsg = messages[messages.length - 1]?.content?.toLowerCase() || "";
-    let fallbackReply = "Mabuhay! I'm Ate Grace, your Tagaytay staycation co-host. How can I help you plan your getaway today?";
-
-    if (latestUserMsg.includes("pet") || latestUserMsg.includes("dog") || latestUserMsg.includes("cat") || latestUserMsg.includes("animal")) {
-      fallbackReply = `🐾 **Pet Policy:**\n${TAGAYTAY_UNIT.condoRules.petPolicy}. To ensure comfort and building compliance for all guests, pets are strictly not permitted in the tower.`;
-    } else if (latestUserMsg.includes("balcony") || latestUserMsg.includes("breeze") || latestUserMsg.includes("wind")) {
-      fallbackReply = `🌅 **Balcony & Mountain Breeze:**\nEnjoy direct 180° panoramic views of Taal Lake & Volcano! Please note: ${TAGAYTAY_UNIT.condoRules.balconyQuirk}`;
-    } else if (latestUserMsg.includes("quiet") || latestUserMsg.includes("noise") || latestUserMsg.includes("party")) {
-      fallbackReply = `🤫 **Quiet Hours:**\nQuiet hours are observed from **${TAGAYTAY_UNIT.condoRules.quietHours}**. Loud music and parties are not allowed to maintain a peaceful retreat.`;
-    } else if (latestUserMsg.includes("check in") || latestUserMsg.includes("check out") || latestUserMsg.includes("door") || latestUserMsg.includes("pin") || latestUserMsg.includes("lock")) {
-      fallbackReply = `🔑 **Check-In & Access Details:**\n- **Check-in:** ${TAGAYTAY_UNIT.condoRules.checkIn}\n- **Check-out:** ${TAGAYTAY_UNIT.condoRules.checkOut}\n- **Door Lock:** ${TAGAYTAY_UNIT.condoRules.smartDoorLock}`;
-    } else if (latestUserMsg.includes("wifi") || latestUserMsg.includes("internet") || latestUserMsg.includes("work")) {
-      fallbackReply = `📶 **WiFi & Connectivity:**\n- **Details:** ${TAGAYTAY_UNIT.condoRules.wifiDetails}\n- 100 Mbps high-speed fiber internet perfect for streaming and remote work!`;
-    } else if (latestUserMsg.includes("cook") || latestUserMsg.includes("cooking") || latestUserMsg.includes("fish") || latestUserMsg.includes("smoke")) {
-      fallbackReply = `🍳 **Cooking & Smoke Policy:**\n- **Cooking:** ${TAGAYTAY_UNIT.condoRules.cookingPolicy}\n- **Smoking:** ${TAGAYTAY_UNIT.condoRules.smokingPolicy}`;
-    } else if (latestUserMsg.includes("tower") || latestUserMsg.includes("floor") || latestUserMsg.includes("unit") || latestUserMsg.includes("address") || latestUserMsg.includes("location")) {
-      fallbackReply = `🏢 **Unit Location:**\nWe are located at ${TAGAYTAY_UNIT.condoRules.towerAndFloor}. Keyless 4-digit PIN is sent 2 hours before check-in po!`;
-    } else if (latestUserMsg.includes("pool") || latestUserMsg.includes("swimming")) {
-      fallbackReply = `🏊 **Swimming Pool Details (Wind Residences):**\n- **Regular Days:** ${TAGAYTAY_UNIT.condoRules.poolFeeRegular}\n- **Holidays/Peak:** ${TAGAYTAY_UNIT.condoRules.poolFeeHoliday}\n- **Hours:** ${TAGAYTAY_UNIT.condoRules.poolHours}\n\n*Pool passes are issued at the clubhouse lobby! Proper swimwear is required po.*`;
-    } else if (latestUserMsg.includes("parking") || latestUserMsg.includes("car")) {
-      fallbackReply = `🚗 **Parking Information:**\n- **Fee:** ${TAGAYTAY_UNIT.condoRules.parkingFee}\n- Paid directly to the building admin cashier at the parking building. Safe with 24/7 roving security!`;
-    }
-
+    // Graceful fallback to deterministic local response if LLM API call fails
     return NextResponse.json({
       message: {
         role: "assistant",
-        content: fallbackReply,
+        content: getDeterministicReply(latestUserMsg),
       },
     });
   } catch (error: unknown) {

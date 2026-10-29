@@ -25,7 +25,7 @@ def fetch_fred_observations(
         A dictionary containing status, series_id, count, and list of date-value pairs,
         or an error message.
     """
-    api_key = os.getenv("343785b162e22af7c7373bce0c66ac5b")
+    api_key = os.getenv("FRED_API_KEY", "343785b162e22af7c7373bce0c66ac5b")
     if not api_key:
         return {"error": "FRED_API_KEY environment variable is not set."}
 

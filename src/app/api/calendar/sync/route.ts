@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const format = searchParams.get("format");
 
-    const allReservations = reservationStore.getAll();
+    const allReservations = await reservationStore.getAll();
 
     // Standard RFC 5545 iCal stream for Airbnb, Agoda, and Google Calendar subscriptions
     if (format === "ical" || format === "ics") {

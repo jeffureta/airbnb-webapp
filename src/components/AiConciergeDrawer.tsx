@@ -43,12 +43,16 @@ export function AiConciergeDrawer() {
     }
   }, [messages, isOpen]);
 
+  const msgIdCounter = useRef(1);
+
   const handleSend = async (textToSend?: string) => {
     const text = textToSend || input;
     if (!text.trim() || loading) return;
 
+    msgIdCounter.current += 1;
+    const userMsgId = `user-msg-${msgIdCounter.current}`;
     const userMsg: ChatMessage = {
-      id: Date.now().toString(),
+      id: userMsgId,
       role: "user",
       content: text,
     };
@@ -70,19 +74,23 @@ export function AiConciergeDrawer() {
       if (!res.ok) throw new Error("Failed to get response");
       const data = await res.json();
 
+      msgIdCounter.current += 1;
+      const botMsgId = `bot-msg-${msgIdCounter.current}`;
       setMessages((prev) => [
         ...prev,
         {
-          id: (Date.now() + 1).toString(),
+          id: botMsgId,
           role: "assistant",
           content: data.message?.content || "Thank you for asking! Let me know if you need anything else po.",
         },
       ]);
     } catch {
+      msgIdCounter.current += 1;
+      const errMsgId = `err-msg-${msgIdCounter.current}`;
       setMessages((prev) => [
         ...prev,
         {
-          id: (Date.now() + 1).toString(),
+          id: errMsgId,
           role: "assistant",
           content:
             "Sorry po, having a momentary connection glitch. Standard check-in is 2:00 PM, pool fee is ₱150 regular / ₱300 holiday, and parking is ₱150 overnight!",

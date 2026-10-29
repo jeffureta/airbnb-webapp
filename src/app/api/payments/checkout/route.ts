@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "reservationId is required" }, { status: 400 });
     }
 
-    const reservation = reservationStore.getById(reservationId);
+    const reservation = await reservationStore.getById(reservationId);
     if (!reservation) {
       return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
     }
@@ -23,13 +23,18 @@ export async function POST(req: NextRequest) {
     }
 
     const paymongoSecretKey = process.env.PAYMONGO_SECRET_KEY;
+    const isProduction = process.env.NODE_ENV === "production";
 
-    // When running without live PayMongo credentials, generate a secure sandbox session link
+    // Guard: Sandbox simulation is strictly forbidden in production
     if (!paymongoSecretKey) {
-      const mockCheckoutId = `chk_test_${Date.now()}`;
+      if (isProduction) {
+        return NextResponse.json(
+          { error: "Payment processor not configured for live transactions" },
+          { status: 503 }
+        );
+      }
+
       const mockPaymentIntentId = `pi_test_${Date.now()}`;
-      
-      // Update reservation with mock payment intent
       reservation.paymongoPaymentIntentId = mockPaymentIntentId;
 
       return NextResponse.json({

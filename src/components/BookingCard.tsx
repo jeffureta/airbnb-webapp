@@ -366,7 +366,7 @@ export function BookingCard() {
                     <button
                       type="button"
                       key={method.id}
-                      onClick={() => setPaymentMethod(method.id as any)}
+                      onClick={() => setPaymentMethod(method.id as "gcash" | "paymaya" | "qrph" | "card")}
                       className={`flex items-center justify-between p-3 rounded-xl border text-xs font-semibold transition ${
                         paymentMethod === method.id
                           ? "border-emerald-700 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600"

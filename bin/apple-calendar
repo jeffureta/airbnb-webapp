@@ -1,0 +1,137 @@
+#!/bin/bash
+# Apple Calendar CLI tool for Chief of Staff
+# Usage:
+#   apple-calendar calendars
+#   apple-calendar events [days_ahead] [calendar_name]
+#   apple-calendar add "<calendar>" "<title>" "<YYYY-MM-DD HH:MM>" [duration_minutes] [location]
+#   apple-calendar delete "<calendar>" "<title>"
+
+CMD="${1:-help}"
+
+case "$CMD" in
+  calendars|list-calendars|list)
+    osascript -e 'tell application "Calendar" to get name of every calendar' | tr ',' '\n' | sed 's/^ *//; s/ *$//'
+    ;;
+
+  events|agenda)
+    DAYS="${2:-1}"
+    CAL_FILTER="${3:-}"
+    osascript - "$DAYS" "$CAL_FILTER" << 'APPLESCRIPT'
+on run argv
+    set daysAhead to (item 1 of argv) as integer
+    set targetCal to item 2 of argv
+    set output to ""
+    set now to current date
+    set startTime to now - (time of now)
+    set endTime to startTime + (daysAhead * days)
+    
+    tell application "Calendar"
+        set calList to {}
+        if targetCal is not "" then
+            try
+                set calList to {calendar targetCal}
+            on error
+                return "Calendar '" & targetCal & "' not found."
+            end try
+        else
+            set calList to calendars
+        end if
+        
+        repeat with c in calList
+            set cName to name of c
+            try
+                set evs to (every event of c whose start date is greater than or equal to startTime and start date is less than or equal to endTime)
+                repeat with ev in evs
+                    set sDate to start date of ev
+                    set eDate to end date of ev
+                    set sTitle to summary of ev
+                    set loc to location of ev
+                    if loc is missing value then set loc to ""
+                    set output to output & "• [" & cName & "] " & sTitle & " (" & (sDate as string) & " - " & (eDate as string) & ")"
+                    if loc is not "" then
+                        set output to output & " @ " & loc
+                    end if
+                    set output to output & return
+                end repeat
+            end try
+        end repeat
+    end tell
+    if output is "" then
+        return "No events scheduled in the next " & daysAhead & " day(s)."
+    end if
+    return output
+end run
+APPLESCRIPT
+    ;;
+
+  add|create)
+    CAL_NAME="$2"
+    TITLE="$3"
+    START_STR="$4"
+    DURATION="${5:-30}"
+    LOCATION="${6:-}"
+
+    if [ -z "$CAL_NAME" ] || [ -z "$TITLE" ] || [ -z "$START_STR" ]; then
+      echo "Usage: apple-calendar add <calendar_name> <event_title> \"YYYY-MM-DD HH:MM\" [duration_minutes] [location]"
+      exit 1
+    fi
+
+    osascript - "$CAL_NAME" "$TITLE" "$START_STR" "$DURATION" "$LOCATION" << 'APPLESCRIPT'
+on run argv
+    set calName to item 1 of argv
+    set eventTitle to item 2 of argv
+    set dateStr to item 3 of argv
+    set durationMinutes to (item 4 of argv) as integer
+    set locStr to item 5 of argv
+    
+    set sDate to date dateStr
+    set eDate to sDate + (durationMinutes * minutes)
+    
+    tell application "Calendar"
+        tell calendar calName
+            if locStr is not "" then
+                make new event with properties {summary:eventTitle, start date:sDate, end date:eDate, location:locStr}
+            else
+                make new event with properties {summary:eventTitle, start date:sDate, end date:eDate}
+            end if
+        end tell
+    end tell
+    return "Created event: '" & eventTitle & "' in '" & calName & "' on " & (sDate as string)
+end run
+APPLESCRIPT
+    ;;
+
+  delete|remove)
+    CAL_NAME="$2"
+    TITLE="$3"
+    if [ -z "$CAL_NAME" ] || [ -z "$TITLE" ]; then
+      echo "Usage: apple-calendar delete <calendar_name> <event_title>"
+      exit 1
+    fi
+    osascript - "$CAL_NAME" "$TITLE" << 'APPLESCRIPT'
+on run argv
+    set calName to item 1 of argv
+    set eventTitle to item 2 of argv
+    tell application "Calendar"
+        tell calendar calName
+            set matches to (every event whose summary is eventTitle)
+            set matchCount to count of matches
+            repeat with ev in matches
+                delete ev
+            end repeat
+            return "Deleted " & matchCount & " event(s) matching '" & eventTitle & "' from '" & calName & "'."
+        end tell
+    end tell
+end run
+APPLESCRIPT
+    ;;
+
+  *)
+    echo "Apple Calendar Terminal CLI"
+    echo "Commands:"
+    echo "  apple-calendar calendars                          - List all calendars"
+    echo "  apple-calendar events [days] [calendar_name]      - View agenda (default 1 day)"
+    echo "  apple-calendar add <cal> <title> <date> [dur] [loc] - Create new event"
+    echo "  apple-calendar delete <cal> <title>               - Delete matching event"
+    ;;
+esac

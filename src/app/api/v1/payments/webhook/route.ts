@@ -1,10 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { reservationStore } from "@/lib/reservations";
 import { googleEcosystemService } from "@/lib/googleEcosystem";
+import { verifyPayMongoSignature } from "@/lib/paymongoWebhook";
 
 export async function POST(req: NextRequest) {
   try {
-    const payload = await req.json();
+    const rawBody = await req.text();
+    const signatureHeader = req.headers.get("paymongo-signature");
+    const webhookSecret = process.env.PAYMONGO_WEBHOOK_SECRET;
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // 1. Signature Verification Check
+    if (webhookSecret) {
+      const verification = verifyPayMongoSignature(rawBody, signatureHeader, webhookSecret);
+      if (!verification.isValid) {
+        console.error(`[PAYMONGO WEBHOOK] Verification failed: ${verification.error}`);
+        return NextResponse.json(
+          { error: `Unauthorized webhook signature: ${verification.error}` },
+          { status: 401 }
+        );
+      }
+    } else {
+      // In production, reject if secret is missing or unverified
+      if (isProduction) {
+        console.error("[PAYMONGO WEBHOOK] PAYMONGO_WEBHOOK_SECRET is not configured in production");
+        return NextResponse.json(
+          { error: "Webhook signature verification required in production" },
+          { status: 500 }
+        );
+      }
+      console.warn("[PAYMONGO WEBHOOK] PAYMONGO_WEBHOOK_SECRET not set; running in local dev mock mode.");
+    }
+
+    // 2. Parse payload safely
+    let payload;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+    }
 
     // PayMongo webhook structure: data.attributes.type === "payment.paid" or custom mock
     const eventType = payload.data?.attributes?.type || payload.type;
@@ -21,7 +55,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify and update reservation status
-    const confirmedRes = reservationStore.confirmPayment(reservationId, paymentRef);
+    const confirmedRes = await reservationStore.confirmPayment(reservationId, paymentRef);
 
     // 1. Google Calendar Two-Way Sync
     const calendarSync = await googleEcosystemService.syncReservationToGoogleCalendar(confirmedRes);
@@ -29,7 +63,9 @@ export async function POST(req: NextRequest) {
     // 2. Gmail Transactional Messaging & PDF Receipt Dispatch
     const receiptDispatch = await googleEcosystemService.sendTransactionalReceipt(confirmedRes);
 
-    console.log(`[PAYMENT WEBHOOK] Successfully verified payment for Reservation ${reservationId}!`);
+    console.log(
+      `[PAYMENT WEBHOOK] Successfully verified payment for Reservation ${reservationId} (Type: ${eventType})`
+    );
     console.log(`[GOOGLE CALENDAR SYNC] Event created: ${calendarSync.eventId}`);
     console.log(`[GMAIL RECEIPT] Dispatched branded PDF receipt to ${confirmedRes.guestEmail}`);
 
@@ -48,4 +84,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-

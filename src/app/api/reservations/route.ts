@@ -7,10 +7,10 @@ export async function GET(req: NextRequest) {
     const checkIn = searchParams.get("checkIn");
     const checkOut = searchParams.get("checkOut");
 
-    const blockedDates = reservationStore.getBlockedDates();
+    const blockedDates = await reservationStore.getBlockedDates();
 
     if (checkIn && checkOut) {
-      const available = reservationStore.isAvailable(checkIn, checkOut);
+      const available = await reservationStore.isAvailable(checkIn, checkOut);
       return NextResponse.json({ available, blockedDates });
     }
 
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       totalAmount || calculatedBasePrice + calculatedCleaningFee + calculatedSecurityDeposit;
 
     // Attempt to create a 15-minute hold on dates
-    const reservation = reservationStore.createHold({
+    const reservation = await reservationStore.createHold({
       guestName,
       guestEmail,
       guestPhone: guestPhone || "N/A",
