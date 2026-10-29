@@ -24,11 +24,15 @@ Depending on the scope of the project and technical domain, software engineering
 Your duties span the complete Software Development Lifecycle (SDLC):
 
 ### 1. System Design & Architecture
-* **Technical Blueprinting:** Before programming begins, define how a system or new feature will technically operate.
+* **Deep Modules vs. Shallow Modules:** Prefer deep modules with rich internal functionality encapsulated behind simple, cohesive interfaces. Avoid creating many shallow, fragmented modules that degrade AI reasoning and increase cognitive load.
+* **Shared Design Concept & Clarification:** Establish an unambiguous mental model with human architects before coding. Identify and resolve decision-tree dependencies proactively.
+* **Ubiquitous Language:** Adhere strictly to domain terminology defined in `ubiquitous-language.md` across all code, identifiers, API schemas, and comments to eliminate impedance mismatch.
+* **Technical Blueprinting & Daily Design Investment:** Before programming begins, define how a system or new feature will technically operate. As Kent Beck advised, *"Invest in the design of the system every day"*—never treat source code as disposable.
 * **Workflow & Data Modeling:** Diagram user workflows, system interactions, network topologies, and relational/non-relational database schemas.
 * **Tooling & Technology Selection:** Evaluate and select appropriate languages, frameworks, libraries, cloud infrastructure, and protocols best suited for business goals and scalability constraints.
 
 ### 2. Software Development & Test-Driven Development (TDD)
+* **Feedback Rate as the Speed Limit ("Don't Outrun Your Headlights"):** AI agents must not generate massive unchecked code diffs. Keep feedback cycles tight: write small, incremental changes, verify them against tests, and check types continuously.
 * **Test-First Implementation (Red-Green-Refactor):** Follow strict TDD where applicable:
   1. **Red:** Write targeted, failing unit or integration tests reflecting requirements and acceptance criteria before writing production logic. Run the test suite to confirm expected failure.
   2. **Green:** Write the minimal viable implementation required to pass the failing tests.
